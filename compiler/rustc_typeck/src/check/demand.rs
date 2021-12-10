@@ -143,12 +143,16 @@ impl<'a, 'tcx> FnCtxt<'a, 'tcx> {
             Err(e) => e,
         };
 
+        // Set the InferCtx to suppress new errors during coercion
+        self.set_suggestion_context(true);
         let expr = expr.peel_drop_temps();
         let cause = self.misc(expr.span);
         let expr_ty = self.resolve_vars_with_obligations(checked_ty);
         let mut err = self.report_mismatched_types(&cause, expected, expr_ty, e.clone());
 
         self.emit_coerce_suggestions(&mut err, expr, expr_ty, expected, expected_ty_expr, e);
+        // Stop suppressing new errors
+        self.set_suggestion_context(false);
 
         (expected, Some(err))
     }

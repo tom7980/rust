@@ -135,10 +135,6 @@ pub struct SelectionContext<'cx, 'tcx> {
     /// policy. In essence, canonicalized queries need their errors propagated
     /// rather than immediately reported because we do not have accurate spans.
     query_mode: TraitQueryMode,
-
-    /// Are we in a selection context to try to make a suggestion for error reporting
-    /// and we don't want to emit errors until we are complete (Overflow)
-    is_suggestion: bool,
 }
 
 // A stack that walks back up the stack frame.
@@ -228,7 +224,6 @@ impl<'cx, 'tcx> SelectionContext<'cx, 'tcx> {
             allow_negative_impls: false,
             is_in_const_context: false,
             query_mode: TraitQueryMode::Standard,
-            is_suggestion: false,
         }
     }
 
@@ -241,7 +236,6 @@ impl<'cx, 'tcx> SelectionContext<'cx, 'tcx> {
             allow_negative_impls: false,
             is_in_const_context: false,
             query_mode: TraitQueryMode::Standard,
-            is_suggestion: false,
         }
     }
 
@@ -258,7 +252,6 @@ impl<'cx, 'tcx> SelectionContext<'cx, 'tcx> {
             allow_negative_impls,
             is_in_const_context: false,
             query_mode: TraitQueryMode::Standard,
-            is_suggestion: false,
         }
     }
 
@@ -275,7 +268,6 @@ impl<'cx, 'tcx> SelectionContext<'cx, 'tcx> {
             allow_negative_impls: false,
             is_in_const_context: false,
             query_mode,
-            is_suggestion: false,
         }
     }
 
@@ -291,31 +283,9 @@ impl<'cx, 'tcx> SelectionContext<'cx, 'tcx> {
             allow_negative_impls: false,
             is_in_const_context: matches!(constness, hir::Constness::Const),
             query_mode: TraitQueryMode::Standard,
-            is_suggestion: false,
         }
     }
 
-    pub fn with_suggestion(
-        infcx: &'cx InferCtxt<'cx, 'tcx>,
-        suggestion: bool,
-    ) -> SelectionContext<'cx, 'tcx> {
-        SelectionContext {
-            infcx,
-            freshener: infcx.freshener_keep_static(),
-            intercrate: false,
-            intercrate_ambiguity_causes: None,
-            allow_negative_impls: false,
-            is_in_const_context: false,
-            query_mode: TraitQueryMode::Standard,
-            is_suggestion: suggestion,
-        }
-    }
-
-    /// Enable suggestion mode for use during error reporting selection contexts
-    /// to prevent reporting overflow errors during method suggestions
-    pub fn is_suggestion(&mut self, suggestion: bool) {
-        self.is_suggestion = suggestion;
-    }
     /// Enables tracking of intercrate ambiguity causes. These are
     /// used in coherence to give improved diagnostics. We don't do
     /// this until we detect a coherence error because it can lead to
@@ -1123,7 +1093,7 @@ impl<'cx, 'tcx> SelectionContext<'cx, 'tcx> {
         if !self.infcx.tcx.recursion_limit().value_within_limit(depth) {
             match self.query_mode {
                 TraitQueryMode::Standard => {
-                    if self.is_suggestion {
+                    if self.infcx.is_suggestion() {
                         return Err(OverflowError::ErrorReporting);
                     }
                     self.infcx.report_overflow_error(error_obligation, true);

@@ -348,6 +348,17 @@ pub struct InferCtxt<'a, 'tcx> {
     /// This flag is true while there is an active snapshot.
     in_snapshot: Cell<bool>,
 
+    /// This flag is set if we're generating a suggestion for an error
+    /// and we don't want to output other errors.
+    ///
+    /// You might wonder why we have `tainted_by_errors_flag` - where that prevents
+    /// errors cascading from seperate compiler passes this flag prevents errors from
+    /// the same pass e.g. errors reported in typecheck that generate suggestions for
+    /// conversion methods that may be ambiguous and recurse infinitely.
+    ///
+    /// Ensure to turn this flag off when you no longer need to supress new errors in the same pass
+    in_suggestion_context_for_error: Cell<bool>,
+
     /// What is the innermost universe we have created? Starts out as
     /// `UniverseIndex::root()` but grows from there as we enter
     /// universal quantifiers.
@@ -622,6 +633,7 @@ impl<'tcx> InferCtxtBuilder<'tcx> {
             tainted_by_errors_flag: Cell::new(false),
             err_count_on_creation: tcx.sess.err_count(),
             in_snapshot: Cell::new(false),
+            in_suggestion_context_for_error: Cell::new(false),
             skip_leak_check: Cell::new(false),
             universe: Cell::new(ty::UniverseIndex::ROOT),
         })
@@ -1235,6 +1247,20 @@ impl<'a, 'tcx> InferCtxt<'a, 'tcx> {
     pub fn set_tainted_by_errors(&self) {
         debug!("set_tainted_by_errors()");
         self.tainted_by_errors_flag.set(true)
+    }
+
+    /// Use this to check if you are currently generating a suggestion for an error message
+    /// inside of this `InferCtx` - can be useful for generating type conversion method suggestions
+    /// where a trait may have an ambiguous implementation if there is no concrete implementation
+    /// for the type you are trying to convert - See test ui/typeck/issue-89275
+    pub fn is_suggestion(&self) -> bool {
+        self.in_suggestion_context_for_error.get()
+    }
+
+    /// Set the suggestion context flag to suppress errors when building other errors
+    pub fn set_suggestion_context(&self, b: bool) {
+        debug!("set_suggestion_context()");
+        self.in_suggestion_context_for_error.set(b)
     }
 
     /// Process the region constraints and return any any errors that
